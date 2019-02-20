@@ -9,7 +9,7 @@ import { rollup, watch } from 'rollup';
 import commonjs from 'rollup-plugin-commonjs';
 import babel from 'rollup-plugin-babel';
 import nodeResolve from 'rollup-plugin-node-resolve';
-import buble from 'rollup-plugin-buble';
+//import buble from 'rollup-plugin-buble';
 import { terser } from 'rollup-plugin-terser';
 import postcss from 'rollup-plugin-postcss';
 import gzipSize from 'gzip-size';
@@ -286,6 +286,9 @@ function createConfig(options, entry, format, writeMeta) {
 		options.entries.filter(e => e !== entry),
 	);
 
+	// patch: more common nodejs built-ins
+	external = external.concat(['util', 'child_process']);
+
 	let aliases = {};
 	// since we transform src/index.js, we need to rename imports for it:
 	if (options.multipleEntries) {
@@ -299,7 +302,11 @@ function createConfig(options, entry, format, writeMeta) {
 	if (options.external === 'none') {
 		// bundle everything (external=[])
 	} else if (options.external) {
-		external = external.concat(peerDeps).concat(options.external.split(','));
+		external = external
+			.concat(peerDeps)
+			// patch: always dont bundle dependencies
+			.concat(Object.keys(pkg.dependencies || {}))
+			.concat(options.external.split(','));
 	} else {
 		external = external
 			.concat(peerDeps)
@@ -438,6 +445,17 @@ function createConfig(options, entry, format, writeMeta) {
 								{ loose: true },
 							],
 						],
+						// patch: also use babel for everything else and target node 10
+						presets: [
+							[
+								require.resolve('@babel/preset-env'),
+								{
+									targets: {
+										node: '10.15.0',
+									},
+								},
+							],
+						],
 					}),
 					{
 						// Custom plugin that removes shebang from code because newer
@@ -461,6 +479,8 @@ function createConfig(options, entry, format, writeMeta) {
 							};
 						},
 					},
+					// patch: do not use bublé
+					/*
 					buble({
 						exclude: 'node_modules/**',
 						jsx: options.jsx || 'h',
@@ -470,6 +490,8 @@ function createConfig(options, entry, format, writeMeta) {
 							dangerousTaggedTemplateString: true,
 						},
 					}),
+					// patch: do not use bublé
+					*/
 					// We should upstream this to rollup
 					// format==='cjs' && replace({
 					// 	[`module.exports = ${rollupName};`]: '',
