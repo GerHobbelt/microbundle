@@ -450,6 +450,7 @@ function createConfig(options, entry, format, writeMeta) {
 							[
 								require.resolve('@babel/preset-env'),
 								{
+									modules: false,
 									targets: {
 										node: '10.15.0',
 									},
