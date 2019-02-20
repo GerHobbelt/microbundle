@@ -421,6 +421,8 @@ function createConfig(options, entry, format, writeMeta) {
 							tsconfigOverride: {
 								compilerOptions: {
 									target: 'esnext',
+									// patch: specify module
+									module: 'es2015',
 								},
 							},
 						}),
