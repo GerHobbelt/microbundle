@@ -76,11 +76,12 @@ Libraries often wish to rename internal object properties or class members to sm
 
 ```json
 {
-  "mangle": {
-    "regex": "^_"
-  }
+	"mangle": {
+		"regex": "^_"
+	}
 }
 ```
+
 ### All CLI Options
 
 ```
@@ -113,6 +114,7 @@ Libraries often wish to rename internal object properties or class members to sm
     --sourcemap      Generate source map  (default true)
     --raw            Show raw byte size  (default false)
     --jsx            A custom JSX pragma like React.createElement (default: h)
+    --injectStyles   Inject CSS into `<head>` (default false)
     -h, --help       Displays this message
 
   Examples

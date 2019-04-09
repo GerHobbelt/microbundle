@@ -38,7 +38,8 @@ export default handler => {
 		.option(
 			'--jsx',
 			'A custom JSX pragma like React.createElement (default: h)',
-		);
+		)
+		.option('--injectStyles', 'Inject CSS into `<head>` (default false)');
 
 	prog
 		.command('build [...entries]', '', { default: true })
