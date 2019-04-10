@@ -475,7 +475,7 @@ function createConfig(options, entry, format, writeMeta) {
 						].filter(Boolean),
 						// only write out CSS for the first bundle (avoids pointless extra files):
 						inject: !!options.injectStyles,
-						extract: !!writeMeta,
+						extract: !options.injectStyles && !!writeMeta,
 					}),
 					Object.keys(moduleAliases).length > 0 &&
 						alias(
