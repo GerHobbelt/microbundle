@@ -11,6 +11,7 @@ import babel from 'rollup-plugin-babel';
 import nodeResolve from 'rollup-plugin-node-resolve';
 //import buble from 'rollup-plugin-buble';
 import { terser } from 'rollup-plugin-terser';
+import alias from 'rollup-plugin-alias';
 import postcss from 'rollup-plugin-postcss';
 import gzipSize from 'gzip-size';
 import brotliSize from 'brotli-size';
@@ -25,14 +26,71 @@ import camelCase from 'camelcase';
 
 const removeScope = name => name.replace(/^@.*\//, '');
 
-const parseGlobals = globalStrings => {
+// Convert booleans and int define= values to literals.
+// This is more intuitive than `microbundle --define A=1` producing A="1".
+const toReplacementExpression = (value, name) => {
+	// --define A="1",B='true' produces string:
+	const matches = value.match(/^(['"])(.+)\1$/);
+	if (matches) {
+		return [JSON.stringify(matches[2]), name];
+	}
+
+	// --define A=1,B=true produces int/boolean literal:
+	if (/^(true|false|\d+)$/i.test(value)) {
+		return [value, name];
+	}
+
+	// default: string literal
+	return [JSON.stringify(value), name];
+};
+
+// Normalize Terser options from microbundle's relaxed JSON format (mutates argument in-place)
+function normalizeMinifyOptions(minifyOptions) {
+	const mangle = minifyOptions.mangle || (minifyOptions.mangle = {});
+	let properties = mangle.properties;
+
+	// allow top-level "properties" key to override mangle.properties (including {properties:false}):
+	if (minifyOptions.properties != null) {
+		properties = mangle.properties =
+			minifyOptions.properties &&
+			Object.assign(properties, minifyOptions.properties);
+	}
+
+	// allow previous format ({ mangle:{regex:'^_',reserved:[]} }):
+	if (minifyOptions.regex || minifyOptions.reserved) {
+		if (!properties) properties = mangle.properties = {};
+		properties.regex = properties.regex || minifyOptions.regex;
+		properties.reserved = properties.reserved || minifyOptions.reserved;
+	}
+
+	if (properties) {
+		if (properties.regex) properties.regex = new RegExp(properties.regex);
+		properties.reserved = [].concat(properties.reserved || []);
+	}
+}
+
+// Parses values of the form "$=jQuery,React=react" into key-value object pairs.
+const parseMappingArgument = (globalStrings, processValue) => {
 	const globals = {};
 	globalStrings.split(',').forEach(globalString => {
-		const [localName, globalName] = globalString.split('=');
-		globals[localName] = globalName;
+		let [key, value] = globalString.split('=');
+		if (processValue) {
+			const r = processValue(value, key);
+			if (r !== undefined) {
+				if (Array.isArray(r)) {
+					[value, key] = r;
+				} else {
+					value = r;
+				}
+			}
+		}
+		globals[key] = value;
 	});
 	return globals;
 };
+
+// Extensions to use when resolving modules
+const EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.es6', '.es', '.mjs'];
 
 const WATCH_OPTS = {
 	exclude: 'node_modules/**',
@@ -248,7 +306,10 @@ async function getInput({ entries, cwd, source, module }) {
 		.concat(
 			entries && entries.length
 				? entries
-				: (source && resolve(cwd, source)) ||
+				: (source &&
+						(Array.isArray(source) ? source : [source]).map(file =>
+							resolve(cwd, file),
+						)) ||
 						((await isDir(resolve(cwd, 'src'))) &&
 							(await jsOrTs(cwd, 'src/index'))) ||
 						(await jsOrTs(cwd, 'index')) ||
@@ -289,14 +350,15 @@ function createConfig(options, entry, format, writeMeta) {
 	// patch: more common nodejs built-ins
 	external = external.concat(['util', 'child_process']);
 
-	let aliases = {};
+	let outputAliases = {};
 	// since we transform src/index.js, we need to rename imports for it:
 	if (options.multipleEntries) {
-		aliases['.'] = './' + basename(options.output);
+		outputAliases['.'] = './' + basename(options.output);
 	}
-	if (options.alias) {
-		aliases = Object.assign(aliases, parseGlobals(options.alias));
-	}
+
+	const moduleAliases = options.alias
+		? parseMappingArgument(options.alias)
+		: {};
 
 	const peerDeps = Object.keys(pkg.peerDependencies || {});
 	if (options.external === 'none') {
@@ -321,7 +383,15 @@ function createConfig(options, entry, format, writeMeta) {
 		return globals;
 	}, {});
 	if (options.globals && options.globals !== 'none') {
-		globals = Object.assign(globals, parseGlobals(options.globals));
+		globals = Object.assign(globals, parseMappingArgument(options.globals));
+	}
+
+	let defines = {};
+	if (options.define) {
+		defines = Object.assign(
+			defines,
+			parseMappingArgument(options.define, toReplacementExpression),
+		);
 	}
 
 	function replaceName(filename, name) {
@@ -352,7 +422,9 @@ function createConfig(options, entry, format, writeMeta) {
 	// let rollupName = safeVariableName(basename(entry).replace(/\.js$/, ''));
 
 	let nameCache = {};
-	let mangleOptions = options.pkg.mangle || false;
+	const bareNameCache = nameCache;
+	// Support "minify" field and legacy "mangle" field via package.json:
+	let minifyOptions = options.pkg.minify || options.pkg.mangle || {};
 
 	const useTypescript = extname(entry) === '.ts' || extname(entry) === '.tsx';
 
@@ -365,9 +437,21 @@ function createConfig(options, entry, format, writeMeta) {
 			nameCache = JSON.parse(
 				fs.readFileSync(resolve(options.cwd, 'mangle.json'), 'utf8'),
 			);
+			// mangle.json can contain a "minify" field, same format as the pkg.mangle:
+			if (nameCache.minify) {
+				minifyOptions = Object.assign(
+					{},
+					minifyOptions || {},
+					nameCache.minify,
+				);
+			}
 		} catch (e) {}
 	}
 	loadNameCache();
+
+	normalizeMinifyOptions(minifyOptions);
+
+	if (nameCache === bareNameCache) nameCache = null;
 
 	let shebang;
 
@@ -383,6 +467,9 @@ function createConfig(options, entry, format, writeMeta) {
 				}
 				return externalTest(id);
 			},
+			treeshake: {
+				propertyReadSideEffects: false,
+			},
 			plugins: []
 				.concat(
 					postcss({
@@ -397,6 +484,12 @@ function createConfig(options, entry, format, writeMeta) {
 						inject: false,
 						extract: !!writeMeta,
 					}),
+					Object.keys(moduleAliases).length > 0 &&
+						alias(
+							Object.assign({}, moduleAliases, {
+								resolve: EXTENSIONS,
+							}),
+						),
 					nodeResolve({
 						module: true,
 						jsnext: true,
@@ -427,6 +520,18 @@ function createConfig(options, entry, format, writeMeta) {
 							},
 						}),
 					!useTypescript && flow({ all: true, pretty: true }),
+					babel({
+						babelrc: false,
+						configFile: false,
+						compact: false,
+						include: 'node_modules/**',
+						plugins: [
+							[
+								require.resolve('babel-plugin-transform-replace-expressions'),
+								{ replace: defines },
+							],
+						],
+					}),
 					// Only used for async await
 					babel({
 						// We mainly use bublé to transpile JS and only use babel to
@@ -434,12 +539,16 @@ function createConfig(options, entry, format, writeMeta) {
 						// supplied configurations we set this option to false. Note
 						// that we never supported using custom babel configs anyway.
 						babelrc: false,
-						extensions: ['.ts', '.tsx', '.js', '.jsx', '.es6', '.es', '.mjs'],
+						extensions: EXTENSIONS,
 						exclude: 'node_modules/**',
 						plugins: [
 							require.resolve('@babel/plugin-syntax-jsx'),
 							// patch: remove this plugin
 							/*
+							[
+								require.resolve('babel-plugin-transform-replace-expressions'),
+								{ replace: defines },
+							],
 							[
 								require.resolve('babel-plugin-transform-async-to-promises'),
 								{ inlineHelpers: true, externalHelpers: true },
@@ -516,26 +625,21 @@ function createConfig(options, entry, format, writeMeta) {
 						terser({
 							sourcemap: true,
 							output: { comments: false },
-							compress: {
-								keep_infinity: true,
-								pure_getters: true,
-							},
+							compress: Object.assign(
+								{
+									keep_infinity: true,
+									pure_getters: true,
+									passes: 10,
+								},
+								minifyOptions.compress || {},
+							),
 							warnings: true,
 							ecma: 5,
 							toplevel: format === 'cjs' || format === 'es',
-							mangle: {
-								properties: mangleOptions
-									? {
-											regex: mangleOptions.regex
-												? new RegExp(mangleOptions.regex)
-												: null,
-											reserved: mangleOptions.reserved || [],
-									  }
-									: false,
-							},
+							mangle: Object.assign({}, minifyOptions.mangle || {}),
 							nameCache,
 						}),
-						mangleOptions && {
+						nameCache && {
 							// before hook
 							options: loadNameCache,
 							// after hook
@@ -563,16 +667,13 @@ function createConfig(options, entry, format, writeMeta) {
 		},
 
 		outputOptions: {
-			paths: aliases,
+			paths: outputAliases,
 			globals,
 			strict: options.strict === true,
 			legacy: true,
 			freeze: false,
 			esModule: false,
 			sourcemap: options.sourcemap,
-			treeshake: {
-				propertyReadSideEffects: false,
-			},
 			format,
 			name: options.name,
 			file: resolve(
