@@ -40,6 +40,42 @@
 }
 ```
 
+### New: Modern JS
+
+Microbundle now has a new `modern` format (`microbundle -f modern`).
+Modern output still bundles and compresses your code, but it keeps useful syntax
+around that actually helps compression:
+
+```js
+// Our source, "src/make-dom.js":
+export default async function makeDom(tag, props, children) {
+	const el = document.createElement(tag);
+	el.append(...(await children));
+	return Object.assign(el, props);
+}
+```
+
+Microbundle compiles the above to this:
+
+```js
+export default async (e, t, a) => {
+	const n = document.createElement(e);
+	return n.append(...(await a)), Object.assign(n, t);
+};
+```
+
+This is enabled by default - all you have to do is add the field to your `package.json`. You might choose to ship modern JS using the "module" field:
+
+```js
+{
+  "main": "dist/foo.umd.js",        // legacy UMD bundle (for Node & CDN's)
+  "module": "dist/foo.modern.mjs",  // modern ES2017 bundle
+  "scripts": {
+    "build": "microbundle src/foo.js -f modern,umd"
+  }
+}
+```
+
 ## 📦 Usage
 
 Microbundle includes two commands - `build` (the default) and `watch`. Neither require any options, but you can tailor things to suit your needs a bit if you like.
@@ -65,7 +101,7 @@ You can specify output builds in a `package.json` as follows:
 ```
 "main": "dist/foo.js",          // CJS bundle
 "umd:main": "dist/foo.umd.js",  // UMD bundle
-"module": "dist/foo.mjs",       // ES Modules bundle
+"module": "dist/foo.m.js",       // ES Modules bundle
 "source": "src/foo.js",         // custom entry module (same as 1st arg to microbundle)
 "types": "dist/foo.d.ts",       // TypeScript typings
 ```
@@ -85,43 +121,42 @@ Libraries often wish to rename internal object properties or class members to sm
 ### All CLI Options
 
 ```
- Usage
-    $ microbundle <command> [options]
+Usage
+	$ microbundle <command> [options]
 
-  Available Commands
-    build    Build once and exit
-    watch    Rebuilds on any change
+Available Commands
+	build    Build once and exit
+	watch    Rebuilds on any change
 
-  For more info, run any command with the `--help` flag
-    $ microbundle build --help
-    $ microbundle watch --help
+For more info, run any command with the `--help` flag
+	$ microbundle build --help
+	$ microbundle watch --help
 
-  Options
-    -v, --version    Displays current version
-    -i, --entry      Entry module(s)
-    -o, --output     Directory to place build files into
-    -f, --format     Only build specified formats  (default es,cjs,umd)
-    -w, --watch      Rebuilds on any change  (default false)
-    --target         Specify your target environment (node or web, default web)
-    --external       Specify external dependencies, or 'none'
-    --globals        Specify globals dependencies, or 'none'
-    --define         Replace constants with hard-coded values
-    --alias          Map imports to different modules
-    --compress       Compress output using Terser  (default true)
-    --strict         Enforce undefined global context and add "use strict"
-    --name           Specify name exposed in UMD builds
-    --cwd            Use an alternative working directory  (default .)
-    --sourcemap      Generate source map  (default true)
-    --raw            Show raw byte size  (default false)
-    --jsx            A custom JSX pragma like React.createElement (default: h)
-    --injectStyles   Inject CSS into `<head>` (default false)
-    -h, --help       Displays this message
+Options
+	-v, --version    Displays current version
+	-i, --entry      Entry module(s)
+	-o, --output     Directory to place build files into
+	-f, --format     Only build specified formats  (default modern,es,cjs,umd)
+	-w, --watch      Rebuilds on any change  (default false)
+	--target         Specify your target environment (node or web)  (default web)
+	--external       Specify external dependencies, or 'none'
+	--globals        Specify globals dependencies, or 'none'
+	--define         Replace constants with hard-coded values
+	--alias          Map imports to different modules
+	--compress       Compress output using Terser
+	--strict         Enforce undefined global context and add "use strict"
+	--name           Specify name exposed in UMD builds
+	--cwd            Use an alternative working directory  (default .)
+	--sourcemap      Generate source map  (default true)
+	--raw            Show raw byte size  (default false)
+	--jsx            A custom JSX pragma like React.createElement (default: h)
+	-h, --help       Displays this message
 
-  Examples
-    $ microbundle microbundle --globals react=React,jquery=$
-    $ microbundle microbundle --define API_KEY=1234
-    $ microbundle microbundle --alias react=preact
-    $ microbundle microbundle --no-sourcemap # don't generate sourcemaps
+Examples
+	$ microbundle build --globals react=React,jquery=$
+	$ microbundle build --define API_KEY=1234
+	$ microbundle build --alias react=preact
+	$ microbundle watch --no-sourcemap # don't generate sourcemaps
 ```
 
 ## 🛣 Roadmap
@@ -134,6 +169,7 @@ Here's what's coming up for Microbundle:
 
 ## 🔨 Built with Microbundle
 
+- [Preact](https://github.com/preactjs/preact) Fast 3kB React alternative with the same modern API. Components & Virtual DOM.
 - [Stockroom](https://github.com/developit/stockroom) Offload your store management to a worker easily.
 - [Microenvi](https://github.com/fwilkerson/microenvi) Bundle, serve, and hot reload with one command.
 - [react-recomponent](https://github.com/philipp-spiess/react-recomponent) Reason-style reducer components for React using ES6 classes.
@@ -141,6 +177,7 @@ Here's what's coming up for Microbundle:
 - [react-hooks-lib](https://github.com/beizhedenglong/react-hooks-lib) A set of reusable react hooks.
 - [mdx-deck-live-code](https://github.com/JReinhold/mdx-deck-live-code) A library for [mdx-deck](https://github.com/jxnblk/mdx-deck) to do live React and JS coding directly in slides.
 - [react-router-ext](https://github.com/ri7nz/react-router-ext) An Extended [react-router-dom](https://github.com/ReactTraining/react-router/tree/master/packages/react-router-dom) with simple usage.
+- [routex.js](https://github.com/alexhoma/routex.js) A dynamic routing library for Next.js.
 
 ## 🥂 License
 
