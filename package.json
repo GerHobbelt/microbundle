@@ -21,15 +21,6 @@
     "trailingComma": "all",
     "useTabs": true
   },
-  "jest": {
-    "testEnvironment": "node",
-    "testURL": "http://localhost"
-  },
-  "husky": {
-    "hooks": {
-      "pre-commit": "lint-staged"
-    }
-  },
   "keywords": [
     "bundle",
     "rollup",
