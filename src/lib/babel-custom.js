@@ -59,7 +59,7 @@ export default babelPlugin.custom(babelCore => ({
 			[
 				{
 					name: '@babel/plugin-transform-react-jsx',
-					pragma: customOptions.jsx || 'h',
+					pragma: customOptions.jsx || 'React.createElement',
 					pragmaFrag: customOptions.jsxFragment || 'Fragment',
 				},
 				!customOptions.typescript && {

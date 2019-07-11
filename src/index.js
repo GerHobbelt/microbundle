@@ -533,7 +533,7 @@ function createConfig(options, entry, format, writeMeta) {
 									sourceMap: options.sourcemap,
 									declaration: true,
 									jsx: 'react',
-									jsxFactory: options.jsx || 'h',
+									jsxFactory: options.jsx || 'React.createElement',
 								},
 							},
 							tsconfigOverride: {
@@ -565,7 +565,7 @@ function createConfig(options, entry, format, writeMeta) {
 							modern,
 							compress: options.compress !== false,
 							targets: options.target === 'node' ? { node: '8' } : undefined,
-							pragma: options.jsx || 'h',
+							pragma: options.jsx || 'React.createElement',
 							pragmaFrag: options.jsxFragment || 'Fragment',
 							typescript: !!useTypescript,
 						},
